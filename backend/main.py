@@ -6,17 +6,21 @@ from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session
 from sqlalchemy.sql import func
 from datetime import datetime, timedelta
 from typing import List
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+import os
 
 # ---------------------
 # Database setup
 # ---------------------
-SQLALCHEMY_DATABASE_URL = "sqlite:///./hackjam.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(bind=engine)
+DB_FILE = "hackjam.db"
+engine = create_engine(f"sqlite:///./{DB_FILE}", connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
+
+if not os.path.exists(DB_FILE):
+    Base.metadata.create_all(bind=engine)
 
 # ---------------------
 # Models
@@ -69,7 +73,7 @@ Base.metadata.create_all(bind=engine)
 # Pydantic Schemas
 # ---------------------
 class UserCreate(BaseModel):
-    email: str
+    email: EmailStr
     name: str
     password: str
 
@@ -78,11 +82,15 @@ class UserOut(BaseModel):
     email: str
     name: str
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 class PostCreate(BaseModel):
     title: str
@@ -97,7 +105,7 @@ class PostOut(BaseModel):
     likes: int
     user_id: int
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CommentCreate(BaseModel):
     post_id: int
@@ -110,7 +118,7 @@ class CommentOut(BaseModel):
     content: str
     created_at: datetime
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # ---------------------
 # Auth setup
@@ -119,6 +127,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 SECRET_KEY = "hackjam2025"
 ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # ---------------------
 # App and Middleware
@@ -133,7 +143,7 @@ app.add_middleware(
 )
 
 # ---------------------
-# Dependencies
+# Dependencies & Helpers
 # ---------------------
 def get_db():
     db = SessionLocal()
@@ -142,11 +152,16 @@ def get_db():
     finally:
         db.close()
 
-def create_access_token(data: dict):
-    expire = datetime.utcnow() + timedelta(minutes=30)
+def create_token(data: dict, expires_delta: timedelta):
     to_encode = data.copy()
+    expire = datetime.utcnow() + expires_delta
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def create_tokens(user_email: str):
+    access_token = create_token({"sub": user_email}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    refresh_token = create_token({"sub": user_email}, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
+    return access_token, refresh_token
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
@@ -170,6 +185,8 @@ def read_root():
 
 @app.post("/register", response_model=UserOut)
 def register(user: UserCreate, db: Session = Depends(get_db)):
+    if len(user.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
     if db.query(User).filter(User.email == user.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     hashed_password = pwd_context.hash(user.password)
@@ -181,13 +198,23 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    if not form_data.username or not form_data.password:
-        raise HTTPException(status_code=400, detail="Username and password required")
     user = db.query(User).filter(User.email == form_data.username).first()
     if not user or not pwd_context.verify(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Wrong email or password")
-    token = create_access_token({"sub": user.email})
-    return {"access_token": token, "token_type": "bearer"}
+    access_token, refresh_token = create_tokens(user.email)
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+@app.post("/refresh", response_model=Token)
+def refresh_token(req: RefreshTokenRequest):
+    try:
+        payload = jwt.decode(req.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if not email:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    access_token, refresh_token = create_tokens(email)
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 @app.get("/posts", response_model=List[PostOut])
 def get_posts(db: Session = Depends(get_db)):
@@ -229,3 +256,9 @@ def create_comment(comment: CommentCreate, db: Session = Depends(get_db), curren
     db.commit()
     db.refresh(db_comment)
     return db_comment
+
+
+#  Keep this for local testing 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
