@@ -266,6 +266,10 @@ def get_highlights(db: Session = Depends(get_db), current_user: User = Depends(g
         })
     return out
 
+# ------------------------------------
+# Feed Endpoint + Category Filtering
+# ------------------------------------
+
 """
 Call /posts?category=tech or /feed?category=events.
 Leave category empty for the full feed.
@@ -312,6 +316,10 @@ def get_feed(
         })
     return feed
 
+# -----------------------
+# Post & Like Endpoints
+# -----------------------
+
 @app.post("/posts/{post_id}/like")
 def like_post(post_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     post = db.query(Post).filter(Post.id == post_id).first()
@@ -349,6 +357,10 @@ def get_comments(post_id: int, db: Session = Depends(get_db), current_user: User
         .all()
     )
 
+# -----------------------
+# Commenting Endpoints
+# -----------------------
+
 @app.delete("/comments/{comment_id}")
 def delete_comment(comment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
@@ -360,9 +372,71 @@ def delete_comment(comment_id: int, db: Session = Depends(get_db), current_user:
     db.commit()
     return {"message": "Comment deleted"}
 
-@app.get("/me", response_model=UserOut)
-def me(current_user: User = Depends(get_current_user)):
+# ---------------------
+# User Dashboard Endpoints
+# ---------------------
+@app.get("/dashboard")
+def get_dashboard(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Total posts by user
+    post_count = db.query(Post).filter(Post.user_id == current_user.id).count()
+    
+    # Total likes received on user's posts
+    like_count = db.query(PostLike).join(Post).filter(Post.user_id == current_user.id).count()
+    
+    # Total comments received on user's posts
+    comment_count = db.query(Comment).join(Post).filter(Post.user_id == current_user.id).count()
+    
+    # Optional: Likes per day for last 7 days
+    today = datetime.now(timezone.utc).date()
+    likes_per_day = []
+    for i in range(7):
+        day = today - timedelta(days=i)
+        count = db.query(PostLike).join(Post).filter(
+            Post.user_id == current_user.id,
+            func.date(PostLike.id) == day
+        ).count()
+        likes_per_day.append({"date": day.isoformat(), "likes": count})
+    
+    return {
+        "user": {"id": current_user.id, "email": current_user.email, "name": current_user.name},
+        "stats": {
+            "total_posts": post_count,
+            "likes_received": like_count,
+            "comments_received": comment_count,
+            "likes_last_7_days": likes_per_day
+        }
+    }
+
+# ---------------------
+# Profile Endpoints
+# ---------------------
+@app.get("/profile", response_model=UserOut)
+def get_profile(current_user: User = Depends(get_current_user)):
     return current_user
+
+class UserUpdate(BaseModel):
+    name: str | None = None
+    email: EmailStr | None = None
+    password: str | None = None
+
+@app.put("/profile", response_model=UserOut)
+def update_profile(user_update: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if user_update.name:
+        current_user.name = user_update.name
+    if user_update.email:
+        if db.query(User).filter(User.email == user_update.email, User.id != current_user.id).first():
+            raise HTTPException(status_code=400, detail="Email already in use")
+        current_user.email = user_update.email
+    if user_update.password:
+        current_user.password_hash = pwd_context.hash(user_update.password)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+# @app.get("/me", response_model=UserOut)
+# def me(current_user: User = Depends(get_current_user)):
+#     return current_user
 
 # ---------------------
 # Local dev runner
