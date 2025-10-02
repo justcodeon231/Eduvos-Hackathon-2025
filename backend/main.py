@@ -88,6 +88,18 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str
 
+class FeedPostOut(BaseModel):
+    id: int
+    title: str
+    content: str
+    category: str
+    likes: int
+    comments: int
+    author: UserOut
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
 class PostCreate(BaseModel):
     title: str
     content: str
@@ -253,6 +265,52 @@ def get_highlights(db: Session = Depends(get_db), current_user: User = Depends(g
             "created_at": p.created_at
         })
     return out
+
+"""
+Call /posts?category=tech or /feed?category=events.
+Leave category empty for the full feed.
+Everything else stays exactly the same.
+"""
+@app.get("/feed", response_model=List[FeedPostOut])
+def get_feed(
+    category: str | None = None,
+    limit: int = 10, 
+    offset: int = 0, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    query = (
+        db.query(
+            Post,
+            func.count(PostLike.id).label("likes_count"),
+            func.count(Comment.id).label("comments_count")
+        )
+        .outerjoin(PostLike, Post.id == PostLike.post_id)
+        .outerjoin(Comment, Post.id == Comment.post_id)
+        .group_by(Post.id)
+        .order_by(Post.created_at.desc())
+    )
+    if category:
+        query = query.filter(Post.category == category)
+    posts_with_counts = query.limit(limit).offset(offset).all()
+
+    feed = []
+    for post, likes_count, comments_count in posts_with_counts:
+        feed.append({
+            "id": post.id,
+            "title": post.title,
+            "content": post.content,
+            "category": post.category,
+            "likes": likes_count,
+            "comments": comments_count,
+            "author": {
+                "id": post.author.id,
+                "email": post.author.email,
+                "name": post.author.name
+            },
+            "created_at": post.created_at
+        })
+    return feed
 
 @app.post("/posts/{post_id}/like")
 def like_post(post_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
