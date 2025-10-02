@@ -7,6 +7,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session
 from sqlalchemy.sql import func as sqlfunc
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import cast, Date
 from datetime import datetime, timedelta, timezone
 from typing import List
 from pydantic import BaseModel, EmailStr
@@ -52,9 +53,11 @@ class PostLike(Base):
     id = Column(Integer, primary_key=True)
     post_id = Column(Integer, ForeignKey("posts.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=sqlfunc.now())  # <-- added
     post = relationship("Post", back_populates="post_likes")
     user = relationship("User", back_populates="likes")
     __table_args__ = (UniqueConstraint('post_id', 'user_id', name='unique_user_like'),)
+
 
 class Comment(Base):
     __tablename__ = "comments"
@@ -376,34 +379,75 @@ def delete_comment(comment_id: int, db: Session = Depends(get_db), current_user:
 # User Dashboard Endpoints
 # ---------------------
 @app.get("/dashboard")
-def get_dashboard(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Total posts by user
-    post_count = db.query(Post).filter(Post.user_id == current_user.id).count()
-    
-    # Total likes received on user's posts
-    like_count = db.query(PostLike).join(Post).filter(Post.user_id == current_user.id).count()
-    
-    # Total comments received on user's posts
-    comment_count = db.query(Comment).join(Post).filter(Post.user_id == current_user.id).count()
-    
-    # Optional: Likes per day for last 7 days
+    total_posts = db.query(func.count(Post.id)).filter(Post.user_id == current_user.id).scalar() or 0
+
+    # Total likes received across user's posts
+    likes_received = (
+        db.query(func.count(PostLike.id))
+        .join(Post, Post.id == PostLike.post_id)
+        .filter(Post.user_id == current_user.id)
+        .scalar() or 0
+    )
+
+    # Total comments received across user's posts
+    comments_received = (
+        db.query(func.count(Comment.id))
+        .join(Post, Post.id == Comment.post_id)
+        .filter(Post.user_id == current_user.id)
+        .scalar() or 0
+    )
+
+    # Engagement per day for the last 7 days
     today = datetime.now(timezone.utc).date()
-    likes_per_day = []
-    for i in range(7):
-        day = today - timedelta(days=i)
-        count = db.query(PostLike).join(Post).filter(
-            Post.user_id == current_user.id,
-            func.date(PostLike.id) == day
-        ).count()
-        likes_per_day.append({"date": day.isoformat(), "likes": count})
-    
+    seven_days_ago = today - timedelta(days=6)
+
+    # Likes per day
+    likes_per_day = (
+        db.query(
+            cast(PostLike.created_at, Date).label("date"),
+            func.count(PostLike.id).label("count")
+        )
+        .join(Post, Post.id == PostLike.post_id)
+        .filter(Post.user_id == current_user.id)
+        .filter(cast(PostLike.created_at, Date) >= seven_days_ago)
+        .group_by(cast(PostLike.created_at, Date))
+        .order_by(cast(PostLike.created_at, Date))
+        .all()
+    )
+
+    # Comments per day
+    comments_per_day = (
+        db.query(
+            cast(Comment.created_at, Date).label("date"),
+            func.count(Comment.id).label("count")
+        )
+        .join(Post, Post.id == Comment.post_id)
+        .filter(Post.user_id == current_user.id)
+        .filter(cast(Comment.created_at, Date) >= seven_days_ago)
+        .group_by(cast(Comment.created_at, Date))
+        .order_by(cast(Comment.created_at, Date))
+        .all()
+    )
+
+    # Format output for frontend
+    engagement_last_7_days = {
+        "likes": [{"date": str(d), "count": c} for d, c in likes_per_day],
+        "comments": [{"date": str(d), "count": c} for d, c in comments_per_day]
+    }
+
     return {
-        "user": {"id": current_user.id, "email": current_user.email, "name": current_user.name},
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "name": current_user.name
+        },
         "stats": {
-            "total_posts": post_count,
-            "likes_received": like_count,
-            "comments_received": comment_count,
-            "likes_last_7_days": likes_per_day
+            "total_posts": total_posts,
+            "likes_received": likes_received,
+            "comments_received": comments_received,
+            "engagement_last_7_days": engagement_last_7_days
         }
     }
 
