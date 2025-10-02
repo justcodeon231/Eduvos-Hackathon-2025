@@ -7,13 +7,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session
 from sqlalchemy.sql import func as sqlfunc
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 from pydantic import BaseModel, EmailStr
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import os
-import uuid
 
 # ---------------------
 # Database setup
@@ -35,7 +34,6 @@ class User(Base):
     posts = relationship("Post", back_populates="author", cascade="all, delete-orphan")
     likes = relationship("PostLike", back_populates="user", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
-    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
 
 class Post(Base):
     __tablename__ = "posts"
@@ -68,20 +66,8 @@ class Comment(Base):
     post = relationship("Post", back_populates="comments")
     user = relationship("User", back_populates="comments")
 
-class RefreshToken(Base):
-    __tablename__ = "refresh_tokens"
-    id = Column(Integer, primary_key=True)
-    token = Column(String, unique=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    expires_at = Column(DateTime)
-    user = relationship("User", back_populates="refresh_tokens")
-
-# Create tables once (after models defined)
-if not os.path.exists(DB_FILE):
-    Base.metadata.create_all(bind=engine)
-else:
-    # ensure tables exist (safe idempotent call)
-    Base.metadata.create_all(bind=engine)
+# Create tables (idempotent)
+Base.metadata.create_all(bind=engine)
 
 # ---------------------
 # Pydantic Schemas
@@ -100,11 +86,7 @@ class UserOut(BaseModel):
 
 class TokenOut(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str
-
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
 
 class PostCreate(BaseModel):
     title: str
@@ -140,10 +122,9 @@ class CommentOut(BaseModel):
 # ---------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-SECRET_KEY = os.getenv("SECRET_KEY", "hackjam2025")  # move to env var in production
+SECRET_KEY = os.getenv("SECRET_KEY", "hackjam2025")  # set in env for prod
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # ---------------------
 # App and Middleware
@@ -167,57 +148,13 @@ def get_db():
     finally:
         db.close()
 
-def create_token(payload: dict, expires_delta: timedelta) -> str:
-    data = payload.copy()
-    data.update({"exp": datetime.utcnow() + expires_delta})
-    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
-
-def create_tokens_and_persist(db: Session, user_email: str) -> (str, str):
-    access = create_token({"sub": user_email}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    refresh_raw = str(uuid.uuid4())
-    refresh = create_token({"sub": user_email, "jti": refresh_raw}, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
-    # persist refresh by its jti (raw) + expiry
-    expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    rt = RefreshToken(token=refresh_raw, user_id=db.query(User).filter(User.email == user_email).first().id, expires_at=expires_at)
-    db.add(rt)
-    db.commit()
-    return access, refresh
-
-def verify_refresh_and_rotate(db: Session, refresh_token: str) -> (str, str):
-    # decode to get jti and sub (email)
-    try:
-        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
-        jti = payload.get("jti")
-        email = payload.get("sub")
-        if not jti or not email:
-            raise HTTPException(status_code=401, detail="Invalid refresh token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
-    # find persisted refresh by jti
-    token_row = db.query(RefreshToken).filter(RefreshToken.token == jti).first()
-    if not token_row:
-        raise HTTPException(status_code=401, detail="Invalid or revoked refresh token")
-    if token_row.expires_at < datetime.utcnow():
-        # remove expired token
-        db.delete(token_row)
-        db.commit()
-        raise HTTPException(status_code=401, detail="Expired refresh token")
-
-    # rotate: remove old, create new
-    db.delete(token_row)
-    db.commit()
-    access = create_token({"sub": email}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    new_refresh_raw = str(uuid.uuid4())
-    new_refresh = create_token({"sub": email, "jti": new_refresh_raw}, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
-    expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    new_row = RefreshToken(token=new_refresh_raw, user_id=db.query(User).filter(User.email == email).first().id, expires_at=expires_at)
-    db.add(new_row)
-    db.commit()
-    return access, new_refresh
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=30))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    if not token:
-        raise HTTPException(status_code=401, detail="Authentication required")
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
@@ -231,16 +168,14 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 # ---------------------
-# AUTH Routes
+# AUTH Routes (public)
 # ---------------------
 @app.get("/")
 def read_root():
     return {"message": "Welcome to HackJam 2025!"}
 
-# Public: register
 @app.post("/register", response_model=UserOut)
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    # basic password policy
     if len(user.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     if db.query(User).filter(User.email == user.email).first():
@@ -252,27 +187,17 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(u)
     return u
 
-# Public: login (form)
 @app.post("/login", response_model=TokenOut)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form_data.username).first()
     if not user or not pwd_context.verify(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    access, refresh = create_tokens_and_persist(db, user.email)
-    return {"access_token": access, "refresh_token": refresh, "token_type": "bearer"}
-
-# Public: refresh endpoint (rotate refresh token)
-@app.post("/refresh", response_model=TokenOut)
-def refresh(req: RefreshTokenRequest, db: Session = Depends(get_db)):
-    access, new_refresh = verify_refresh_and_rotate(db, req.refresh_token)
-    return {"access_token": access, "refresh_token": new_refresh, "token_type": "bearer"}
+    access_token = create_access_token({"sub": user.email}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    return {"access_token": access_token, "token_type": "bearer"}
 
 # ---------------------
-# Authenticated endpoints below
+# Authenticated endpoints
 # ---------------------
-# Posts
-# ---------------------
-
 @app.get("/posts", response_model=List[PostOut])
 def get_posts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     posts = db.query(Post).order_by(Post.created_at.desc()).all()
@@ -296,20 +221,18 @@ def create_post(post: PostCreate, db: Session = Depends(get_db), current_user: U
     db.add(p)
     db.commit()
     db.refresh(p)
-    likes_count = 0
     return {
         "id": p.id,
         "title": p.title,
         "content": p.content,
         "category": p.category,
-        "likes": likes_count,
+        "likes": 0,
         "author": {"id": current_user.id, "email": current_user.email, "name": current_user.name},
         "created_at": p.created_at
     }
 
 @app.get("/posts/highlights", response_model=List[PostOut])
 def get_highlights(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # top posts by number of likes
     posts_with_likes = (
         db.query(Post, func.count(PostLike.id).label("likes"))
           .outerjoin(PostLike, Post.id == PostLike.post_id)
@@ -336,14 +259,12 @@ def like_post(post_id: int, db: Session = Depends(get_db), current_user: User = 
     post = db.query(Post).filter(Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    # Prevent double-like using DB unique constraint + catch IntegrityError
     new_like = PostLike(post_id=post_id, user_id=current_user.id)
     db.add(new_like)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        # Already liked
         raise HTTPException(status_code=403, detail="Already liked this post")
     return {"message": "Post liked!"}
 
@@ -358,11 +279,6 @@ def create_comment(comment: CommentCreate, db: Session = Depends(get_db), curren
     db.refresh(c)
     return c
 
-# ---------------------
-# Comment Endpoints
-# ---------------------
-
-# Get all comments for a post
 @app.get("/posts/{post_id}/comments", response_model=List[CommentOut])
 def get_comments(post_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     post = db.query(Post).filter(Post.id == post_id).first()
@@ -375,7 +291,6 @@ def get_comments(post_id: int, db: Session = Depends(get_db), current_user: User
         .all()
     )
 
-# Delete a comment (only owner can delete)
 @app.delete("/comments/{comment_id}")
 def delete_comment(comment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
@@ -387,8 +302,6 @@ def delete_comment(comment_id: int, db: Session = Depends(get_db), current_user:
     db.commit()
     return {"message": "Comment deleted"}
 
-
-# Simple helper: get my profile
 @app.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
@@ -399,4 +312,3 @@ def me(current_user: User = Depends(get_current_user)):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
-# To run: python Backend/main.py
