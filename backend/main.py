@@ -31,6 +31,7 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     name = Column(String)
     password_hash = Column(String)
+    # role = Column(String, default="user")  # "user" or "admin"
     posts = relationship("Post", back_populates="author", cascade="all, delete-orphan")
     likes = relationship("PostLike", back_populates="user", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
