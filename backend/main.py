@@ -230,7 +230,7 @@ def get_posts(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         })
     return out
 
-@app.post("/posts", response_model=PostOut)
+@app.post("/post", response_model=PostOut)
 def create_post(post: PostCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     p = Post(**post.dict(), user_id=current_user.id)
     db.add(p)
