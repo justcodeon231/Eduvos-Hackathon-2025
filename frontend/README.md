@@ -14,6 +14,7 @@ A comprehensive innovation management platform built with Next.js 15, featuring 
 
 ## Tech Stack
 
+### Frontend
 - **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS v4
@@ -23,14 +24,52 @@ A comprehensive innovation management platform built with Next.js 15, featuring 
 - **State Management**: React Context API
 - **HTTP Client**: Fetch API
 
+### Backend
+- **Framework**: FastAPI (Python)
+- **Database**: SQLite with SQLAlchemy ORM
+- **Authentication**: JWT with passlib
+- **CORS**: Enabled for frontend integration
+
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18.x or higher
+- **Frontend**: Node.js 18.x or higher
+- **Backend**: Python 3.10 or higher
 - npm, yarn, or pnpm package manager
+- pip for Python packages
 
-### Installation
+### Backend Setup
+
+1. Navigate to your backend directory (or create one):
+\`\`\`bash
+mkdir backend
+cd backend
+\`\`\`
+
+2. Create a virtual environment:
+\`\`\`bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+\`\`\`
+
+3. Install dependencies:
+\`\`\`bash
+pip install fastapi uvicorn sqlalchemy python-jose passlib python-multipart pydantic[email]
+\`\`\`
+
+4. Create `main.py` with the FastAPI backend code (provided separately)
+
+5. Run the backend server:
+\`\`\`bash
+python main.py
+# or
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
+\`\`\`
+
+The backend will be available at `http://localhost:8000`
+
+### Frontend Setup
 
 1. Clone the repository:
 \`\`\`bash
@@ -47,7 +86,15 @@ yarn install
 pnpm install
 \`\`\`
 
-3. Configure environment variables (see Environment Variables section below)
+3. Configure environment variables:
+\`\`\`bash
+cp .env.example .env.local
+\`\`\`
+
+Edit `.env.local` and set:
+\`\`\`env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+\`\`\`
 
 4. Run the development server:
 \`\`\`bash
@@ -62,20 +109,25 @@ pnpm dev
 
 ## Environment Variables
 
-Create a `.env.local` file in the root directory with the following variables:
+Create a `.env.local` file in the root directory:
 
 \`\`\`env
-# API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:8000/api
+# API Configuration (REQUIRED)
+NEXT_PUBLIC_API_URL=http://localhost:8000
 
-# Optional: Add other environment variables as needed
+# For production, use your deployed backend URL:
+# NEXT_PUBLIC_API_URL=https://your-backend-api.com
 \`\`\`
 
 ### Environment Variable Descriptions
 
-- `NEXT_PUBLIC_API_URL`: The base URL for your backend API. This must be prefixed with `NEXT_PUBLIC_` to be accessible in the browser.
+- `NEXT_PUBLIC_API_URL`: The base URL for your FastAPI backend. Must be prefixed with `NEXT_PUBLIC_` to be accessible in the browser.
 
-**Note**: Environment variables prefixed with `NEXT_PUBLIC_` are exposed to the browser. Keep sensitive keys without this prefix to keep them server-side only.
+**Important Notes**:
+- The backend runs on port 8000 by default
+- The frontend runs on port 3000 by default
+- CORS is configured in the backend to allow requests from the frontend
+- Environment variables prefixed with `NEXT_PUBLIC_` are exposed to the browser
 
 ## Project Structure
 
@@ -201,265 +253,227 @@ Full dashboard page with analytics.
 
 ## API Integration
 
-### API Service (`lib/api.ts`)
+### Backend API Endpoints
 
-The API service provides functions for all backend interactions:
+The frontend integrates with the following FastAPI endpoints:
 
 #### Authentication
-- `login(email, password)`: Authenticate user and return JWT
-- `register(name, email, password)`: Create new user account
+- `POST /register` - Create new user account
+  - Body: `{ name, email, password }`
+  - Returns: `{ id, name, email }`
+  
+- `POST /login` - Authenticate user
+  - Body: `{ email, password }`
+  - Returns: `{ token, user: { id, name, email } }`
 
-#### Posts
-- `getPosts(offset, limit, category)`: Fetch paginated posts
-- `createPost(title, content, category)`: Create new post
-- `likePost(postId)`: Like a post
-- `unlikePost(postId)`: Unlike a post
+#### Posts & Feed
+- `GET /feed?category=&offset=&limit=` - Get paginated posts
+  - Query params: `category` (optional), `offset`, `limit`
+  - Returns: Array of posts with likes/comments count
+  
+- `POST /post` - Create new post
+  - Body: `{ title, content, category }`
+  - Returns: Created post object
+  
+- `GET /posts/highlights` - Get top 4 posts by likes
+  - Returns: Array of top posts
+  
+- `POST /posts/{id}/like` - Like a post
+  - Returns: `{ message: "Post liked!" }`
 
 #### Comments
-- `getComments(postId)`: Fetch comments for a post
-- `createComment(postId, content)`: Add comment to post
+- `GET /posts/{id}/comments` - Get comments for a post
+  - Returns: Array of comments
+  
+- `POST /comments` - Create new comment
+  - Body: `{ post_id, content }`
+  - Returns: Created comment object
+  
+- `DELETE /comments/{id}` - Delete own comment
+  - Returns: `{ message: "Comment deleted" }`
 
 #### Profile
-- `getProfile()`: Fetch current user profile
-- `updateProfile(data)`: Update user profile
+- `GET /profile` - Get current user profile
+  - Returns: `{ id, name, email }`
+  
+- `PUT /profile` - Update user profile
+  - Body: `{ name?, email?, password? }`
+  - Returns: Updated user object
 
 #### Dashboard
-- `getDashboard()`: Fetch dashboard statistics
+- `GET /dashboard` - Get user statistics
+  - Returns: `{ user, stats: { total_posts, likes_received, comments_received, engagement_last_7_days } }`
 
-### API Response Handling
+### API Service (`lib/api.ts`)
 
-All API functions include:
-- Automatic JWT token inclusion in headers
-- Error handling with descriptive messages
-- JSON response parsing
-- Token expiry detection and logout
+The API service provides typed functions for all backend interactions with automatic JWT token handling and error management.
 
-## Adding New Features
+## Backend Data Models
 
-### Adding a New Page
+### User
+- `id`: Integer (Primary Key)
+- `email`: String (Unique)
+- `name`: String
+- `password_hash`: String
 
-1. Create a new directory in `app/`:
+### Post
+- `id`: Integer (Primary Key)
+- `title`: String
+- `content`: String
+- `category`: String
+- `created_at`: DateTime
+- `user_id`: Integer (Foreign Key)
+
+### Comment
+- `id`: Integer (Primary Key)
+- `post_id`: Integer (Foreign Key)
+- `user_id`: Integer (Foreign Key)
+- `content`: String
+- `created_at`: DateTime
+
+### PostLike
+- `id`: Integer (Primary Key)
+- `post_id`: Integer (Foreign Key)
+- `user_id`: Integer (Foreign Key)
+- `created_at`: DateTime
+- Unique constraint on (post_id, user_id)
+
+## Category Mapping
+
+The frontend uses display names that map to backend category values:
+
+| Frontend Display | Backend Value |
+|-----------------|---------------|
+| Home | (no filter) |
+| Ideas Hub | ideas |
+| Collaborate/Brainstorm | collaborate |
+| Resources/Gamification | resources |
+| Research Guardians | research |
+| Forum | forum |
+
+## Development Workflow
+
+### Running Both Frontend and Backend
+
+1. **Terminal 1 - Backend**:
 \`\`\`bash
-mkdir app/new-page
+cd backend
+source venv/bin/activate
+python main.py
 \`\`\`
 
-2. Create `page.tsx`:
-\`\`\`tsx
-import { ProtectedRoute } from "@/components/protected-route"
-
-export default function NewPage() {
-  return (
-    <ProtectedRoute>
-      <div>Your content here</div>
-    </ProtectedRoute>
-  )
-}
-\`\`\`
-
-3. Add navigation link in `components/header.tsx`:
-\`\`\`tsx
-const mainNavItems = [
-  // ... existing items
-  { href: "/new-page", label: "New Page", icon: YourIcon },
-]
-\`\`\`
-
-### Adding a New API Endpoint
-
-1. Add function to `lib/api.ts`:
-\`\`\`tsx
-export async function newApiFunction(params: any) {
-  const token = localStorage.getItem("token")
-  const response = await fetch(`${API_URL}/endpoint`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(params),
-  })
-  
-  if (!response.ok) {
-    throw new Error("Error message")
-  }
-  
-  return response.json()
-}
-\`\`\`
-
-2. Use in component:
-\`\`\`tsx
-import { newApiFunction } from "@/lib/api"
-
-// In component
-const handleAction = async () => {
-  try {
-    const result = await newApiFunction(data)
-    // Handle success
-  } catch (error) {
-    // Handle error
-  }
-}
-\`\`\`
-
-### Adding a New Component
-
-1. Create component file in `components/`:
-\`\`\`tsx
-// components/new-component.tsx
-export function NewComponent() {
-  return <div>Component content</div>
-}
-\`\`\`
-
-2. Import and use in pages:
-\`\`\`tsx
-import { NewComponent } from "@/components/new-component"
-\`\`\`
-
-### Adding a New Category
-
-1. Update `components/navigation.tsx`:
-\`\`\`tsx
-const navItems = [
-  // ... existing items
-  "New Category",
-]
-\`\`\`
-
-2. The category will automatically work with the existing feed filtering system.
-
-## Modifying Features
-
-### Changing Authentication Flow
-
-Edit `contexts/auth-context.tsx` to modify:
-- Token storage location (localStorage vs cookies)
-- Token refresh logic
-- User data structure
-- Authentication state management
-
-### Customizing Post Display
-
-Edit `components/engagement-feed.tsx` to modify:
-- Post card layout
-- Interaction buttons
-- Metadata display
-- Loading states
-
-### Updating Styles
-
-1. Global styles: Edit `app/globals.css`
-2. Component styles: Modify Tailwind classes in component files
-3. Theme colors: Update CSS variables in `globals.css`:
-\`\`\`css
-@theme inline {
-  --color-primary: /* your color */;
-  --color-secondary: /* your color */;
-}
-\`\`\`
-
-## Removing Features
-
-### Removing a Page
-
-1. Delete the page directory:
+2. **Terminal 2 - Frontend**:
 \`\`\`bash
-rm -rf app/page-name
+npm run dev
 \`\`\`
 
-2. Remove navigation links from `components/header.tsx`
+3. Access the application at `http://localhost:3000`
 
-### Removing a Feature from Feed
+### Testing the Integration
 
-1. Edit `components/engagement-feed.tsx`
-2. Remove the feature's UI elements and event handlers
-3. Remove related API calls from `lib/api.ts`
+1. **Register a new user**:
+   - Go to `/register`
+   - Create an account
+   - You'll be automatically logged in
 
-### Removing Authentication
+2. **Create posts**:
+   - Click "Create Post" button
+   - Fill in title, content, and category
+   - Post will appear in the feed
 
-**Not recommended**, but if needed:
-1. Remove `ProtectedRoute` wrappers from pages
-2. Remove `AuthProvider` from `app/layout.tsx`
-3. Remove authentication-related API calls
-4. Remove login/register pages
+3. **Interact with posts**:
+   - Like posts by clicking the thumbs up icon
+   - Comment on posts by clicking the comment icon
+   - View your stats in the dashboard
 
-## Development Tips
+### Mock Data vs Real API
 
-### Mock Data for Development
+The application is configured to work with the real FastAPI backend. If you need to work without the backend:
 
-When backend is not available, you can mock API responses:
-
-\`\`\`tsx
-// lib/api.ts
-export async function getPosts() {
-  // Return mock data instead of API call
-  return {
-    posts: [
-      { id: 1, title: "Mock Post", content: "Content", likes: 5 }
-    ]
-  }
-}
-\`\`\`
-
-### Debugging
-
-Use console.log with `[v0]` prefix for debugging:
-\`\`\`tsx
-console.log("[v0] User data:", userData)
-console.log("[v0] API response:", response)
-\`\`\`
-
-### Testing Protected Routes
-
-1. Login with valid credentials
-2. Check localStorage for token: `localStorage.getItem("token")`
-3. Try accessing protected pages
-4. Clear token to test redirect: `localStorage.removeItem("token")`
+1. Update `lib/api.ts` to return mock data
+2. Comment out API calls and return static data
+3. This is useful for UI development without backend dependency
 
 ## Common Issues
 
-### API Connection Errors
+### Backend Connection Errors
 
-- Verify `NEXT_PUBLIC_API_URL` is set correctly
-- Check backend server is running
-- Verify CORS is configured on backend
+**Problem**: "Failed to fetch" or CORS errors
+
+**Solutions**:
+- Verify backend is running: `curl http://localhost:8000`
+- Check `NEXT_PUBLIC_API_URL` in `.env.local`
+- Ensure CORS is enabled in FastAPI backend
+- Check firewall/antivirus isn't blocking ports
+
+### Database Errors
+
+**Problem**: SQLite database errors
+
+**Solutions**:
+- Delete `hackjam.db` file and restart backend
+- Check file permissions on database file
+- Ensure SQLAlchemy models match database schema
 
 ### Authentication Issues
 
+**Problem**: Token expired or invalid
+
+**Solutions**:
 - Clear localStorage: `localStorage.clear()`
-- Check token format in API responses
-- Verify JWT is being sent in headers
+- Check JWT secret key matches between sessions
+- Verify token expiry time (default 30 minutes)
+- Re-login to get fresh token
 
-### Styling Issues
+### Port Conflicts
 
-- Clear Next.js cache: `rm -rf .next`
-- Restart development server
-- Check Tailwind class names are correct
+**Problem**: Port already in use
 
-## Building for Production
+**Solutions**:
+- Backend: Change port in `main.py`: `uvicorn.run("main:app", port=8001)`
+- Frontend: Run on different port: `npm run dev -- -p 3001`
+- Update `NEXT_PUBLIC_API_URL` accordingly
 
+## Deployment
+
+### Backend Deployment
+
+1. **Using a VPS or Cloud Server**:
 \`\`\`bash
-npm run build
-npm run start
+# Install dependencies
+pip install -r requirements.txt
+
+# Run with production server
+gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 \`\`\`
 
-Or deploy to Vercel:
+2. **Using Docker**:
+\`\`\`dockerfile
+FROM python:3.10
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+\`\`\`
+
+3. **Environment Variables for Production**:
+\`\`\`bash
+export SECRET_KEY="your-secret-key-here"
+export DATABASE_URL="postgresql://..." # If using PostgreSQL
+\`\`\`
+
+### Frontend Deployment
+
+Deploy to Vercel (recommended):
 \`\`\`bash
 vercel deploy
 \`\`\`
 
-## Contributing
+Set environment variable in Vercel dashboard:
+- `NEXT_PUBLIC_API_URL`: Your deployed backend URL
 
-1. Create a feature branch
-2. Make your changes
-3. Test thoroughly
-4. Submit a pull request
-
-## License
-
-[Your License Here]
-
-## Support
-
-For issues or questions, please contact [your-email@example.com]
+Or build for self-hosting:
+\`\`\`bash
+npm run build
+npm run start

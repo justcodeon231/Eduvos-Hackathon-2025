@@ -46,11 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (name: string, email: string, password: string) => {
     try {
-      const response: AuthResponse = await authService.register(name, email, password)
-      authService.setToken(response.token)
-      authService.setUser(response.user)
-      setUser(response.user)
-      router.push("/")
+      await authService.register(name, email, password)
+      // After registration, login to get token
+      await login(email, password)
     } catch (error) {
       throw error
     }

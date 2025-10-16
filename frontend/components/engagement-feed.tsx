@@ -6,20 +6,22 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ThumbsUp, MessageSquare, Share2, Bookmark } from "lucide-react"
-import { postsApi, type Post } from "@/lib/api"
+import { postsApi, type FeedPost } from "@/lib/api"
 import { CommentsSection } from "@/components/comments-section"
 
 interface EngagementFeedProps {
   category?: string
+  onRefresh?: () => void
 }
 
-export function EngagementFeed({ category }: EngagementFeedProps) {
-  const [posts, setPosts] = useState<Post[]>([])
+export function EngagementFeed({ category, onRefresh }: EngagementFeedProps) {
+  const [posts, setPosts] = useState<FeedPost[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
-  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
+  const [expandedComments, setExpandedComments] = useState<Set<number>>(new Set())
+  const [likedPosts, setLikedPosts] = useState<Set<number>>(new Set())
   const limit = 10
 
   useEffect(() => {
@@ -33,7 +35,15 @@ export function EngagementFeed({ category }: EngagementFeedProps) {
     try {
       setIsLoading(true)
       const currentOffset = reset ? 0 : offset
-      const categoryFilter = category === "Home" ? undefined : category
+      const categoryMap: Record<string, string> = {
+        Home: "",
+        "Ideas Hub": "ideas",
+        "Collaborate/Brainstorm": "collaborate",
+        "Resources/Gamification": "resources",
+        "Research Guardians": "research",
+        Forum: "forum",
+      }
+      const categoryFilter = category ? categoryMap[category] || category.toLowerCase() : undefined
       const newPosts = await postsApi.getFeed(categoryFilter, currentOffset, limit)
 
       setPosts((prev) => (reset ? newPosts : [...prev, ...newPosts]))
@@ -46,21 +56,26 @@ export function EngagementFeed({ category }: EngagementFeedProps) {
     }
   }
 
-  const handleLike = async (postId: string, isLiked: boolean) => {
+  const handleLike = async (postId: number) => {
     try {
-      if (isLiked) {
-        await postsApi.unlikePost(postId)
-      } else {
-        await postsApi.likePost(postId)
-      }
+      await postsApi.likePost(postId)
+
+      setLikedPosts((prev) => {
+        const newSet = new Set(prev)
+        if (newSet.has(postId)) {
+          newSet.delete(postId)
+        } else {
+          newSet.add(postId)
+        }
+        return newSet
+      })
 
       setPosts((prev) =>
         prev.map((post) =>
           post.id === postId
             ? {
                 ...post,
-                isLiked: !isLiked,
-                likes: isLiked ? post.likes - 1 : post.likes + 1,
+                likes: likedPosts.has(postId) ? post.likes - 1 : post.likes + 1,
               }
             : post,
         ),
@@ -70,7 +85,7 @@ export function EngagementFeed({ category }: EngagementFeedProps) {
     }
   }
 
-  const toggleComments = (postId: string) => {
+  const toggleComments = (postId: number) => {
     setExpandedComments((prev) => {
       const newSet = new Set(prev)
       if (newSet.has(postId)) {
@@ -82,7 +97,7 @@ export function EngagementFeed({ category }: EngagementFeedProps) {
     })
   }
 
-  const handleCommentAdded = (postId: string) => {
+  const handleCommentAdded = (postId: number) => {
     setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, comments: post.comments + 1 } : post)))
   }
 
@@ -115,14 +130,14 @@ export function EngagementFeed({ category }: EngagementFeedProps) {
             <Card key={post.id} className="p-6">
               <div className="flex items-start gap-3 mb-4">
                 <Avatar>
-                  <AvatarImage src={post.userAvatar || "/placeholder.svg"} />
-                  <AvatarFallback>{post.userName[0]}</AvatarFallback>
+                  <AvatarImage src="/placeholder.svg" />
+                  <AvatarFallback>{post.author.name[0]}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-semibold">{post.userName}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(post.createdAt).toLocaleString()}</p>
+                      <p className="font-semibold">{post.author.name}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleString()}</p>
                     </div>
                     <Button variant="ghost" size="icon">
                       <Bookmark className="w-4 h-4" />
@@ -134,17 +149,15 @@ export function EngagementFeed({ category }: EngagementFeedProps) {
               <h3 className="font-semibold text-lg mb-2">{post.title}</h3>
               <p className="text-muted-foreground mb-4">{post.content}</p>
 
-              <div className="flex flex-wrap gap-2 mb-4">
-                {post.tags.map((tag) => (
-                  <Badge key={tag} variant="outline">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
+              {post.category && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Badge variant="outline">{post.category}</Badge>
+                </div>
+              )}
 
               <div className="flex items-center gap-4 pt-4 border-t">
-                <Button variant="ghost" size="sm" className="gap-2" onClick={() => handleLike(post.id, post.isLiked)}>
-                  <ThumbsUp className={`w-4 h-4 ${post.isLiked ? "fill-primary text-primary" : ""}`} />
+                <Button variant="ghost" size="sm" className="gap-2" onClick={() => handleLike(post.id)}>
+                  <ThumbsUp className={`w-4 h-4 ${likedPosts.has(post.id) ? "fill-primary text-primary" : ""}`} />
                   {post.likes}
                 </Button>
                 <Button variant="ghost" size="sm" className="gap-2" onClick={() => toggleComments(post.id)}>

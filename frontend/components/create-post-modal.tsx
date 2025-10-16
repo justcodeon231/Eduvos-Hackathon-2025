@@ -21,7 +21,6 @@ export function CreatePostModal({ onPostCreated }: CreatePostModalProps) {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [category, setCategory] = useState("")
-  const [tags, setTags] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
 
@@ -40,16 +39,11 @@ export function CreatePostModal({ onPostCreated }: CreatePostModalProps) {
         title,
         content,
         category,
-        tags: tags
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
       })
 
       setTitle("")
       setContent("")
       setCategory("")
-      setTags("")
       setOpen(false)
       onPostCreated()
     } catch (err) {
@@ -97,11 +91,11 @@ export function CreatePostModal({ onPostCreated }: CreatePostModalProps) {
                 <SelectValue placeholder="Select a category" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Ideas Hub">Ideas Hub</SelectItem>
-                <SelectItem value="Collaborate/Brainstorm">Collaborate/Brainstorm</SelectItem>
-                <SelectItem value="Resources/Gamification">Resources/Gamification</SelectItem>
-                <SelectItem value="Research Guardians">Research Guardians</SelectItem>
-                <SelectItem value="Forum">Forum</SelectItem>
+                <SelectItem value="ideas">Ideas Hub</SelectItem>
+                <SelectItem value="collaborate">Collaborate/Brainstorm</SelectItem>
+                <SelectItem value="resources">Resources/Gamification</SelectItem>
+                <SelectItem value="research">Research Guardians</SelectItem>
+                <SelectItem value="forum">Forum</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -115,17 +109,6 @@ export function CreatePostModal({ onPostCreated }: CreatePostModalProps) {
               onChange={(e) => setContent(e.target.value)}
               disabled={isSubmitting}
               rows={6}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="tags">Tags (comma-separated)</Label>
-            <Input
-              id="tags"
-              placeholder="e.g. AI, Innovation, Technology"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              disabled={isSubmitting}
             />
           </div>
 

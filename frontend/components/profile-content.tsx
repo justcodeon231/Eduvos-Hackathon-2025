@@ -8,7 +8,6 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { profileApi, type UserProfile } from "@/lib/api"
 import { useAuth } from "@/contexts/auth-context"
@@ -26,7 +25,6 @@ export function ProfileContent() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    bio: "",
     password: "",
     confirmPassword: "",
   })
@@ -43,7 +41,6 @@ export function ProfileContent() {
       setFormData({
         name: data.name,
         email: data.email,
-        bio: data.bio || "",
         password: "",
         confirmPassword: "",
       })
@@ -64,12 +61,16 @@ export function ProfileContent() {
       return
     }
 
+    if (formData.password && formData.password.length < 8) {
+      setError("Password must be at least 8 characters")
+      return
+    }
+
     try {
       setIsSaving(true)
       const updateData: any = {
         name: formData.name,
         email: formData.email,
-        bio: formData.bio,
       }
 
       if (formData.password) {
@@ -93,7 +94,6 @@ export function ProfileContent() {
       setFormData({
         name: profile.name,
         email: profile.email,
-        bio: profile.bio || "",
         password: "",
         confirmPassword: "",
       })
@@ -137,15 +137,12 @@ export function ProfileContent() {
           <Card className="p-6">
             <div className="flex items-center gap-6 mb-8">
               <Avatar className="w-24 h-24">
-                <AvatarImage src={profile?.avatar || "/placeholder.svg"} />
+                <AvatarImage src="/placeholder.svg" />
                 <AvatarFallback className="text-2xl">{profile?.name[0]}</AvatarFallback>
               </Avatar>
               <div>
                 <h2 className="text-2xl font-semibold">{profile?.name}</h2>
                 <p className="text-muted-foreground">{profile?.email}</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Member since {new Date(profile?.createdAt || "").toLocaleDateString()}
-                </p>
               </div>
             </div>
 
@@ -173,18 +170,6 @@ export function ProfileContent() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bio">Bio</Label>
-                <Textarea
-                  id="bio"
-                  value={formData.bio}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
-                  disabled={!isEditing || isSaving}
-                  rows={4}
-                  placeholder="Tell us about yourself..."
-                />
-              </div>
-
               {isEditing && (
                 <>
                   <div className="space-y-2">
@@ -197,6 +182,7 @@ export function ProfileContent() {
                       disabled={isSaving}
                       placeholder="Leave blank to keep current password"
                     />
+                    <p className="text-xs text-muted-foreground">Minimum 8 characters</p>
                   </div>
 
                   <div className="space-y-2">

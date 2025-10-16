@@ -2,58 +2,80 @@ import { authService } from "./auth"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
+export interface Author {
+  id: number
+  name: string
+  email: string
+}
+
 export interface Post {
-  id: string
-  userId: string
-  userName: string
-  userAvatar?: string
+  id: number
   title: string
   content: string
   category: string
-  tags: string[]
   likes: number
   comments: number
-  isLiked: boolean
-  createdAt: string
+  author: Author
+  created_at: string
+}
+
+export interface FeedPost {
+  id: number
+  title: string
+  content: string
+  category: string
+  likes: number
+  comments: number
+  author: Author
+  created_at: string
 }
 
 export interface Comment {
-  id: string
-  postId: string
-  userId: string
-  userName: string
-  userAvatar?: string
+  id: number
+  post_id: number
+  user_id: number
   content: string
-  createdAt: string
+  created_at: string
 }
 
 export interface CreatePostData {
   title: string
   content: string
   category: string
-  tags: string[]
 }
 
 export interface CreateCommentData {
-  postId: string
+  post_id: number
   content: string
 }
 
-// Added profile types
 export interface UserProfile {
-  id: string
+  id: number
   name: string
   email: string
-  avatar?: string
-  bio?: string
-  createdAt: string
 }
 
 export interface UpdateProfileData {
   name?: string
   email?: string
   password?: string
-  bio?: string
+}
+
+export interface DashboardResponse {
+  user: {
+    id: number
+    email: string
+    name: string
+  }
+  stats: {
+    total_posts: number
+    likes_received: number
+    comments_received: number
+    engagement_last_7_days: {
+      likes: Array<{ date: string; count: number }>
+      comments: Array<{ date: string; count: number }>
+    }
+  }
 }
 
 export interface DashboardStats {
@@ -87,43 +109,41 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: "Request failed" }))
-    throw new Error(error.message || "Request failed")
+    const error = await response.json().catch(() => ({ detail: "Request failed" }))
+    throw new Error(error.detail || error.message || "Request failed")
   }
 
   return response.json()
 }
 
 export const postsApi = {
-  async getFeed(category?: string, offset = 0, limit = 10): Promise<Post[]> {
+  async getFeed(category?: string, offset = 0, limit = 10): Promise<FeedPost[]> {
     const params = new URLSearchParams({
       offset: offset.toString(),
       limit: limit.toString(),
-      ...(category && { category }),
+      ...(category && category !== "home" && { category }),
     })
     return fetchWithAuth(`${API_BASE_URL}/feed?${params}`)
   },
 
+  async getHighlights(): Promise<Post[]> {
+    return fetchWithAuth(`${API_BASE_URL}/posts/highlights`)
+  },
+
   async createPost(data: CreatePostData): Promise<Post> {
-    return fetchWithAuth(`${API_BASE_URL}/posts`, {
+    return fetchWithAuth(`${API_BASE_URL}/post`, {
       method: "POST",
       body: JSON.stringify(data),
     })
   },
 
-  async likePost(postId: string): Promise<void> {
+  async likePost(postId: number): Promise<{ message: string }> {
     return fetchWithAuth(`${API_BASE_URL}/posts/${postId}/like`, {
       method: "POST",
     })
   },
 
-  async unlikePost(postId: string): Promise<void> {
-    return fetchWithAuth(`${API_BASE_URL}/posts/${postId}/like`, {
-      method: "DELETE",
-    })
-  },
-
-  async getComments(postId: string): Promise<Comment[]> {
+  async getComments(postId: number): Promise<Comment[]> {
     return fetchWithAuth(`${API_BASE_URL}/posts/${postId}/comments`)
   },
 
@@ -131,6 +151,12 @@ export const postsApi = {
     return fetchWithAuth(`${API_BASE_URL}/comments`, {
       method: "POST",
       body: JSON.stringify(data),
+    })
+  },
+
+  async deleteComment(commentId: number): Promise<{ message: string }> {
+    return fetchWithAuth(`${API_BASE_URL}/comments/${commentId}`, {
+      method: "DELETE",
     })
   },
 }
@@ -150,6 +176,30 @@ export const profileApi = {
 
 export const dashboardApi = {
   async getStats(): Promise<DashboardStats> {
-    return fetchWithAuth(`${API_BASE_URL}/dashboard`)
+    const response: DashboardResponse = await fetchWithAuth(`${API_BASE_URL}/dashboard`)
+
+    // Transform backend response to frontend format
+    const engagementMap = new Map<string, { likes: number; comments: number }>()
+
+    // Merge likes and comments by date
+    response.stats.engagement_last_7_days.likes.forEach(({ date, count }) => {
+      engagementMap.set(date, { likes: count, comments: 0 })
+    })
+
+    response.stats.engagement_last_7_days.comments.forEach(({ date, count }) => {
+      const existing = engagementMap.get(date) || { likes: 0, comments: 0 }
+      engagementMap.set(date, { ...existing, comments: count })
+    })
+
+    const engagementData = Array.from(engagementMap.entries())
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    return {
+      totalPosts: response.stats.total_posts,
+      totalLikes: response.stats.likes_received,
+      totalComments: response.stats.comments_received,
+      engagementData,
+    }
   },
 }
