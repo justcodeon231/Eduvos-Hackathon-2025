@@ -9,7 +9,7 @@ export interface AuthResponse {
   user: User
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export const authService = {
   async login(email: string, password: string): Promise<AuthResponse> {

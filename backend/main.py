@@ -87,6 +87,10 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
+class AuthResponse(BaseModel):
+    token: str
+    user: UserOut
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str
@@ -202,13 +206,26 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(u)
     return u
 
-@app.post("/login", response_model=TokenOut)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not pwd_context.verify(form_data.password, user.password_hash):
+class LoginSchema(BaseModel):
+    email: EmailStr
+    password: str
+
+@app.post("/login", response_model=AuthResponse)  # AuthResponse includes token + user
+def login_json(login: LoginSchema, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == login.email).first()
+    if not user or not pwd_context.verify(login.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
     access_token = create_access_token({"sub": user.email}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    return {"access_token": access_token, "token_type": "bearer"}
+    
+    return {
+        "token": access_token,
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email
+        }
+    }
 
 # ---------------------
 # Authenticated endpoints
