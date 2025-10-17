@@ -112,6 +112,18 @@ class Notification(Base):
     )
 
 
+# ---------------------
+# Forum Model
+# ---------------------
+class ForumMessage(Base):
+    __tablename__ = "forum_messages"
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(String)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=sqlfunc.now())
+    author = relationship("User")
+
+
 # Create tables (idempotent)
 Base.metadata.create_all(bind=engine)
 
@@ -190,6 +202,20 @@ class NotificationOut(BaseModel):
     comment_id: Optional[int] = None
     is_read: int
     created_at: datetime
+
+# ---------------------
+# Forum Schemas
+# ---------------------
+class ForumMessageCreate(BaseModel):
+    content: str
+
+class ForumMessageOut(BaseModel):
+    id: int
+    content: str
+    author: UserOut
+    created_at: datetime
+    class Config:
+        from_attributes = True
 
 # ---------------------
 # Auth setup
@@ -511,6 +537,37 @@ def delete_comment(comment_id: int, db: Session = Depends(get_db), current_user:
     db.delete(comment)
     db.commit()
     return {"message": "Comment deleted"}
+
+# ---------------------
+# Forum Endpoints
+# ---------------------
+@app.get("/forum/messages", response_model=List[ForumMessageOut])
+def get_forum_messages(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    messages = db.query(ForumMessage).order_by(ForumMessage.created_at.desc()).all()
+    out = []
+    for m in messages:
+        out.append({
+            "id": m.id,
+            "content": m.content,
+            "author": {"id": m.author.id, "email": m.author.email, "name": m.author.name},
+            "created_at": m.created_at
+        })
+    return out
+
+@app.post("/forum/post", response_model=ForumMessageOut)
+def post_forum_message(msg: ForumMessageCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if contains_profanity(msg.content):
+        raise HTTPException(status_code=400, detail="Message contains inappropriate language")
+    m = ForumMessage(content=msg.content, user_id=current_user.id)
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    return {
+        "id": m.id,
+        "content": m.content,
+        "author": {"id": current_user.id, "email": current_user.email, "name": current_user.name},
+        "created_at": m.created_at
+    }
 
 # ---------------------
 # Notifications API (pollable)
