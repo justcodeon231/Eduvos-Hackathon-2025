@@ -36,6 +36,7 @@ export interface Comment {
   user_id: number
   content: string
   created_at: string
+  author_display: string
 }
 
 export interface CreatePostData {
@@ -115,6 +116,17 @@ export interface Conversation {
 export interface CreateMessageData {
   conversation_id: number
   content: string
+}
+
+export interface Notification {
+  id: number
+  notification_type: string
+  message: string
+  actor_id: number | null
+  post_id: number | null
+  comment_id: number | null
+  is_read: number
+  created_at: string
 }
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
@@ -255,6 +267,19 @@ export const messagesApi = {
   async markAsRead(conversationId: number): Promise<{ message: string }> {
     return fetchWithAuth(`${API_BASE_URL}/conversations/${conversationId}/read`, {
       method: "POST",
+    })
+  },
+}
+
+export const notificationsApi = {
+  async getNotifications(since?: string): Promise<Notification[]> {
+    const params = since ? `?since=${encodeURIComponent(since)}` : ""
+    return fetchWithAuth(`${API_BASE_URL}/notifications${params}`)
+  },
+
+  async markAsRead(notificationId: number): Promise<{ message: string }> {
+    return fetchWithAuth(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+      method: "PATCH",
     })
   },
 }

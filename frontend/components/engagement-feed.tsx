@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ThumbsUp, MessageSquare, Share2, Bookmark } from "lucide-react"
+import { ThumbsUp, MessageSquare, Share2, Bookmark, Pin } from "lucide-react"
 import { postsApi, type FeedPost } from "@/lib/api"
 import { CommentsSection } from "@/components/comments-section"
 
@@ -22,6 +22,7 @@ export function EngagementFeed({ category, onRefresh }: EngagementFeedProps) {
   const [hasMore, setHasMore] = useState(true)
   const [expandedComments, setExpandedComments] = useState<Set<number>>(new Set())
   const [likedPosts, setLikedPosts] = useState<Set<number>>(new Set())
+  const [expandedPosts, setExpandedPosts] = useState<Set<number>>(new Set())
   const limit = 10
 
   useEffect(() => {
@@ -101,6 +102,24 @@ export function EngagementFeed({ category, onRefresh }: EngagementFeedProps) {
     setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, comments: post.comments + 1 } : post)))
   }
 
+  const toggleExpand = (postId: number) => {
+    setExpandedPosts((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(postId)) {
+        newSet.delete(postId)
+        setExpandedComments((prevComments) => {
+          const newComments = new Set(prevComments)
+          newComments.delete(postId)
+          return newComments
+        })
+      } else {
+        newSet.add(postId)
+        setExpandedComments((prevComments) => new Set(prevComments).add(postId))
+      }
+      return newSet
+    })
+  }
+
   if (error) {
     return (
       <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-md">
@@ -126,54 +145,96 @@ export function EngagementFeed({ category, onRefresh }: EngagementFeedProps) {
         </Card>
       ) : (
         <div className="space-y-4">
-          {posts.map((post) => (
-            <Card key={post.id} className="p-6">
-              <div className="flex items-start gap-3 mb-4">
-                <Avatar>
-                  <AvatarImage src="/placeholder.svg" />
-                  <AvatarFallback>{post.author.name[0]}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
+          {posts.map((post) => {
+            const isExpanded = expandedPosts.has(post.id)
+            const shouldTruncate = post.content.length > 200
+            const displayContent = isExpanded || !shouldTruncate ? post.content : post.content.slice(0, 200) + "..."
+
+            return (
+              <Card key={post.id} className="p-6 bg-white shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-10 h-10 ring-2 ring-primary/10">
+                      <AvatarImage src="/placeholder.svg" />
+                      <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold">
+                        {post.author.name[0]}
+                      </AvatarFallback>
+                    </Avatar>
                     <div>
-                      <p className="font-semibold">{post.author.name}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleString()}</p>
+                      <p className="font-semibold text-sm text-foreground">{post.author.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Posted an Idea • {new Date(post.created_at).toLocaleDateString()}
+                      </p>
                     </div>
-                    <Button variant="ghost" size="icon">
-                      <Bookmark className="w-4 h-4" />
-                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Pin className="w-4 h-4 text-foreground" />
+                    <span className="text-sm font-medium">Pinned</span>
                   </div>
                 </div>
-              </div>
 
-              <h3 className="font-semibold text-lg mb-2">{post.title}</h3>
-              <p className="text-muted-foreground mb-4">{post.content}</p>
-
-              {post.category && (
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <Badge variant="outline">{post.category}</Badge>
+                <div className="flex items-start gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-600 mt-2 flex-shrink-0" />
+                  <h3 className="font-bold text-lg text-foreground leading-tight">{post.title}</h3>
                 </div>
-              )}
 
-              <div className="flex items-center gap-4 pt-4 border-t">
-                <Button variant="ghost" size="sm" className="gap-2" onClick={() => handleLike(post.id)}>
-                  <ThumbsUp className={`w-4 h-4 ${likedPosts.has(post.id) ? "fill-primary text-primary" : ""}`} />
-                  {post.likes}
-                </Button>
-                <Button variant="ghost" size="sm" className="gap-2" onClick={() => toggleComments(post.id)}>
-                  <MessageSquare className="w-4 h-4" />
-                  {post.comments}
-                </Button>
-                <Button variant="ghost" size="sm" className="gap-2 ml-auto">
-                  <Share2 className="w-4 h-4" />
-                </Button>
-              </div>
+                <p className="text-sm text-muted-foreground mb-2 leading-relaxed whitespace-pre-wrap">
+                  {displayContent}
+                </p>
 
-              {expandedComments.has(post.id) && (
-                <CommentsSection postId={post.id} onCommentAdded={() => handleCommentAdded(post.id)} />
-              )}
-            </Card>
-          ))}
+                {shouldTruncate && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="p-0 h-auto text-blue-600 hover:text-blue-700 font-medium mb-3"
+                    onClick={() => toggleExpand(post.id)}
+                  >
+                    {isExpanded ? "Show less" : "Read more"}
+                  </Button>
+                )}
+
+                {post.category && (
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <Badge variant="outline" className="text-blue-600 border-blue-600 bg-blue-50 hover:bg-blue-100">
+                      #{post.category}
+                    </Badge>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1 pt-4 border-t border-border">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 hover:bg-primary/5 transition-colors"
+                    onClick={() => handleLike(post.id)}
+                  >
+                    <ThumbsUp
+                      className={`w-4 h-4 transition-all ${likedPosts.has(post.id) ? "fill-primary text-primary scale-110" : ""}`}
+                    />
+                    <span className="font-medium">{post.likes}</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 hover:bg-primary/5 transition-colors"
+                    onClick={() => toggleExpand(post.id)}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span className="font-medium">{post.comments}</span>
+                  </Button>
+                  <div className="flex-1" />
+                  <Button variant="ghost" size="sm" className="hover:bg-primary/5 transition-colors">
+                    <Share2 className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="hover:bg-primary/5 transition-colors">
+                    <Bookmark className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                {isExpanded && <CommentsSection postId={post.id} onCommentAdded={() => handleCommentAdded(post.id)} />}
+              </Card>
+            )
+          })}
 
           {hasMore && (
             <Button

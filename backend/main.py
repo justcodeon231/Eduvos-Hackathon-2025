@@ -28,14 +28,31 @@ Base = declarative_base()
 # ---------------------
 class User(Base):
     __tablename__ = "users"
+
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     name = Column(String)
     password_hash = Column(String)
+
     posts = relationship("Post", back_populates="author", cascade="all, delete-orphan")
     likes = relationship("PostLike", back_populates="user", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
-    notifications = relationship("Notification", back_populates="recipient", cascade="all, delete-orphan")
+
+    # Notifications where the user is the one receiving it
+    received_notifications = relationship(
+        "Notification",
+        foreign_keys="[Notification.recipient_id]",
+        back_populates="recipient",
+        cascade="all, delete-orphan"
+    )
+
+    # Notifications where the user performed the action (actor)
+    sent_notifications = relationship(
+        "Notification",
+        foreign_keys="[Notification.actor_id]",
+        back_populates="actor",
+        cascade="all, delete-orphan"
+    )
 
 class Post(Base):
     __tablename__ = "posts"
@@ -71,17 +88,29 @@ class Comment(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
+
     id = Column(Integer, primary_key=True)
-    recipient_id = Column(Integer, ForeignKey("users.id"))  # who receives the notification
-    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # who performed the action (optional)
-    notification_type = Column(String)  # "like", "comment", "share", etc.
+    recipient_id = Column(Integer, ForeignKey("users.id"))  # Who receives it
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Who triggered it
+    notification_type = Column(String)  # e.g. "like", "comment", "share"
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)
     comment_id = Column(Integer, ForeignKey("comments.id"), nullable=True)
-    message = Column(String)  # short human-readable message
-    is_read = Column(Integer, default=0)  # 0 = unread, 1 = read
+    message = Column(String)
+    is_read = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=sqlfunc.now())
 
-    recipient = relationship("User", back_populates="notifications", foreign_keys=[recipient_id])
+    recipient = relationship(
+        "User",
+        back_populates="received_notifications",
+        foreign_keys=[recipient_id]
+    )
+
+    actor = relationship(
+        "User",
+        back_populates="sent_notifications",
+        foreign_keys=[actor_id]
+    )
+
 
 # Create tables (idempotent)
 Base.metadata.create_all(bind=engine)

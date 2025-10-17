@@ -20,6 +20,7 @@ export function CommentsSection({ postId, onCommentAdded }: CommentsSectionProps
   const [newComment, setNewComment] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState("")
   const { user } = useAuth()
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export function CommentsSection({ postId, onCommentAdded }: CommentsSectionProps
 
     try {
       setIsSubmitting(true)
+      setError("")
       const comment = await postsApi.createComment({
         post_id: postId,
         content: newComment,
@@ -52,6 +54,8 @@ export function CommentsSection({ postId, onCommentAdded }: CommentsSectionProps
       setNewComment("")
       onCommentAdded()
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to post comment"
+      setError(errorMessage)
       console.error("[v0] Failed to post comment:", err)
     } finally {
       setIsSubmitting(false)
@@ -69,7 +73,7 @@ export function CommentsSection({ postId, onCommentAdded }: CommentsSectionProps
   }
 
   return (
-    <div className="mt-4 pt-4 border-t space-y-4">
+    <div className="mt-4 pt-4 border-t space-y-4 bg-muted/30 rounded-lg p-4">
       <form onSubmit={handleSubmit} className="space-y-2">
         <Textarea
           placeholder="Write a comment..."
@@ -77,8 +81,10 @@ export function CommentsSection({ postId, onCommentAdded }: CommentsSectionProps
           onChange={(e) => setNewComment(e.target.value)}
           disabled={isSubmitting}
           rows={2}
+          className="bg-white"
         />
-        <Button type="submit" size="sm" disabled={isSubmitting || !newComment.trim()}>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" size="sm" disabled={isSubmitting || !newComment.trim()} className="bg-primary">
           {isSubmitting ? "Posting..." : "Post Comment"}
         </Button>
       </form>
@@ -91,14 +97,21 @@ export function CommentsSection({ postId, onCommentAdded }: CommentsSectionProps
             <div key={comment.id} className="flex gap-3">
               <Avatar className="w-8 h-8">
                 <AvatarImage src="/placeholder.svg" />
-                <AvatarFallback>U</AvatarFallback>
+                <AvatarFallback className="bg-muted">A</AvatarFallback>
               </Avatar>
               <div className="flex-1">
-                <div className="bg-muted rounded-lg p-3">
+                <div className="bg-white rounded-lg p-3 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <p className="font-semibold text-sm">User {comment.user_id}</p>
+                    <p className="font-semibold text-sm text-muted-foreground">
+                      {comment.author_display || "Anonymous"}
+                    </p>
                     {user && user.id === comment.user_id && (
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete(comment.id)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => handleDelete(comment.id)}
+                      >
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     )}

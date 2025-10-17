@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Search, Bell, HelpCircle, User, LogOut, LayoutDashboard, Home, MessageSquare } from "lucide-react"
+import { Search, HelpCircle, User, LogOut, LayoutDashboard, Home, MessageSquare } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -19,6 +19,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { ChatSidebar } from "@/components/chat-sidebar"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 
 export function Header() {
   const { user, logout } = useAuth()
@@ -82,10 +83,7 @@ export function Header() {
               <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(true)}>
                 <MessageSquare className="w-5 h-5" />
               </Button>
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
-              </Button>
+              <NotificationsDropdown />
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
