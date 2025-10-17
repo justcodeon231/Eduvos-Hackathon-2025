@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Search, HelpCircle, User, LogOut, LayoutDashboard, Home, MessageSquare } from "lucide-react"
+import { Search, HelpCircle, User, LogOut, LayoutDashboard, Home, MessageSquare, Menu, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -26,6 +26,7 @@ export function Header() {
   const router = useRouter()
   const pathname = usePathname()
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const handleLogout = () => {
     logout()
@@ -38,18 +39,32 @@ export function Header() {
 
   return (
     <>
-      <header className="border-b bg-card">
+      <header className="border-b bg-card sticky top-0 z-40 backdrop-blur-sm bg-card/95">
         <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+          <div className="flex items-center justify-between gap-4">
+            {/* Logo and Mobile Menu Button */}
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              >
+                {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </Button>
+
+              <Link
+                href="/"
+                className="flex items-center gap-3 hover:opacity-80 transition-all duration-200 hover:scale-105"
+              >
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
                   <Building2 className="w-5 h-5 text-primary-foreground" />
                 </div>
-                <span className="font-semibold text-lg">Eduvos</span>
+                <span className="font-bold text-lg hidden sm:block">Eduvos</span>
               </Link>
 
-              <nav className="hidden md:flex items-center gap-1">
+              {/* Desktop Navigation */}
+              <nav className="hidden md:flex items-center gap-1 ml-4">
                 {mainNavItems.map((item) => {
                   const Icon = item.icon
                   const isActive = pathname === item.href
@@ -58,7 +73,10 @@ export function Header() {
                       <Button
                         variant={isActive ? "secondary" : "ghost"}
                         size="sm"
-                        className={cn("gap-2", isActive && "bg-secondary")}
+                        className={cn(
+                          "gap-2 transition-all duration-200",
+                          isActive && "bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20",
+                        )}
                       >
                         <Icon className="w-4 h-4" />
                         {item.label}
@@ -69,32 +87,47 @@ export function Header() {
               </nav>
             </div>
 
-            <div className="flex-1 max-w-md mx-8">
-              <div className="relative">
+            {/* Search Bar - Hidden on small mobile */}
+            <div className="hidden sm:flex flex-1 max-w-md">
+              <div className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Search new projects, groups..." className="pl-10" />
+                <Input
+                  placeholder="Search ideas, people..."
+                  className="pl-10 border-2 focus:border-primary transition-colors"
+                />
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon">
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" className="hidden sm:flex hover:scale-110 transition-transform">
                 <HelpCircle className="w-5 h-5" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(true)}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsChatOpen(true)}
+                className="hover:scale-110 transition-transform"
+              >
                 <MessageSquare className="w-5 h-5" />
               </Button>
               <NotificationsDropdown />
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-8 w-8 rounded-full p-0">
-                    <Avatar className="w-8 h-8">
+                  <Button
+                    variant="ghost"
+                    className="relative h-8 w-8 rounded-full p-0 hover:scale-110 transition-transform"
+                  >
+                    <Avatar className="w-8 h-8 ring-2 ring-primary/20">
                       <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                      <AvatarFallback>{user?.name?.[0] || "U"}</AvatarFallback>
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
+                        {user?.name?.[0] || "U"}
+                      </AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent align="end" className="w-56 animate-scale-in">
                   <DropdownMenuLabel>
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium leading-none">{user?.name}</p>
@@ -102,21 +135,6 @@ export function Header() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <div className="md:hidden">
-                    <DropdownMenuItem asChild>
-                      <Link href="/" className="cursor-pointer">
-                        <Home className="mr-2 h-4 w-4" />
-                        <span>Home</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/dashboard" className="cursor-pointer">
-                        <LayoutDashboard className="mr-2 h-4 w-4" />
-                        <span>Dashboard</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </div>
                   <DropdownMenuItem asChild>
                     <Link href="/profile" className="cursor-pointer">
                       <User className="mr-2 h-4 w-4" />
@@ -132,6 +150,33 @@ export function Header() {
               </DropdownMenu>
             </div>
           </div>
+
+          {isMobileMenuOpen && (
+            <div className="md:hidden mt-4 pb-2 space-y-2 animate-slide-up">
+              {/* Mobile Search */}
+              <div className="relative sm:hidden">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input placeholder="Search..." className="pl-10 border-2" />
+              </div>
+
+              {/* Mobile Navigation Links */}
+              {mainNavItems.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setIsMobileMenuOpen(false)}>
+                    <Button
+                      variant={isActive ? "secondary" : "ghost"}
+                      className={cn("w-full justify-start gap-2", isActive && "bg-primary/10")}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {item.label}
+                    </Button>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
         </div>
       </header>
 

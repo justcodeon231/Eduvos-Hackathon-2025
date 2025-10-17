@@ -270,8 +270,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 # ---------------------
 # Small profanity list (can expand)
 # ---------------------
-PROFANITY = {"fuck", "shit", "bitch", "asshole", "bastard", "nigger", "cunt", "damn"}  # add/modify as needed
-
+PROFANITY = {"fuck", "shit", "bitch", "asshole", "bastard", "nigger", "cunt", "damn", "motherfucker", "cock", "pussy", "dick", "tits", "crap", "goddamn", "hell", "suck", "whore", "slut", "douchebag", "prick", "wanker", "bollocks", "arse", "bloody", "feck", "gobshite", "jizz", "twat", "choad", "coochie", "minge", "schlong", "squirt", "turd", "wazoo", "asshat", "bellend", "bint", "bugger", "clunge", "dilf", "dink", "fanny", "knob", "muff", "nonce", "piss", "ponce", "retard", "scrote", "shag", "spunk", "tosser", "virgin", "willy", "zapper", "afro", "carpetmuncher", "dildo", "dyke", "fag", "gook", "gyp", "kike", "lez", "midget", "milf", "nazi", "paki", "pedo", "queer", "raghead", "sandnigger", "slope", "spic", "wetback", "whoreson", "buttplug", "rimjob", "blowjob", "handjob", "teabagging", "cuckold", "cumshot", "gangbang", "threesome", "anal", "oral", "sexting", "masturbate", "porn", "prostitute", "stripper", "bondage", "sadism", "masochism", "fetish", "voyeur", "exhibitionist", "incest", "zoophilia"}
 def contains_profanity(text: str) -> bool:
     if not text:
         return False

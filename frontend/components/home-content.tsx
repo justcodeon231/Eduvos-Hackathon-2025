@@ -36,8 +36,8 @@ export function HomeContent() {
             <EngagementFeed key={`${refreshKey}-${activeCategory}`} category={activeCategory} />
           </div>
 
-          {/* Right Sidebar */}
-          <div className="space-y-6">
+          {/* Right Sidebar - Hidden on mobile, shown on large screens */}
+          <div className="hidden lg:block space-y-6 sticky top-20 self-start">
             <UpcomingEvents />
             <Dashboard />
             <NotificationsSidebar />
