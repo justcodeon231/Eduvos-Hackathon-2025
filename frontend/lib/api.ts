@@ -91,6 +91,32 @@ export interface EngagementDataPoint {
   comments: number
 }
 
+export interface Message {
+  id: number
+  conversation_id: number
+  sender_id: number
+  sender_name: string
+  content: string
+  created_at: string
+  read: boolean
+}
+
+export interface Conversation {
+  id: number
+  participant_id: number
+  participant_name: string
+  participant_email: string
+  last_message: string
+  last_message_time: string
+  unread_count: number
+  starred: boolean
+}
+
+export interface CreateMessageData {
+  conversation_id: number
+  content: string
+}
+
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = authService.getToken()
 
@@ -201,5 +227,34 @@ export const dashboardApi = {
       totalComments: response.stats.comments_received,
       engagementData,
     }
+  },
+}
+
+export const messagesApi = {
+  async getConversations(): Promise<Conversation[]> {
+    return fetchWithAuth(`${API_BASE_URL}/conversations`)
+  },
+
+  async getMessages(conversationId: number): Promise<Message[]> {
+    return fetchWithAuth(`${API_BASE_URL}/conversations/${conversationId}/messages`)
+  },
+
+  async sendMessage(data: CreateMessageData): Promise<Message> {
+    return fetchWithAuth(`${API_BASE_URL}/messages`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  },
+
+  async toggleStar(conversationId: number): Promise<{ starred: boolean }> {
+    return fetchWithAuth(`${API_BASE_URL}/conversations/${conversationId}/star`, {
+      method: "POST",
+    })
+  },
+
+  async markAsRead(conversationId: number): Promise<{ message: string }> {
+    return fetchWithAuth(`${API_BASE_URL}/conversations/${conversationId}/read`, {
+      method: "POST",
+    })
   },
 }

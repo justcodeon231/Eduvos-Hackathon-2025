@@ -393,6 +393,13 @@ def delete_comment(comment_id: int, db: Session = Depends(get_db), current_user:
     return {"message": "Comment deleted"}
 
 # ---------------------
+# Messaging Endpoints
+# ---------------------
+# TODO: implement messaging system
+# Create Message model, endpoints for sending/receiving messages
+# For now, this is a placeholder (/conversations, /send, etc.)
+
+# ---------------------
 # User Dashboard Endpoints
 # ---------------------
 @app.get("/dashboard")
