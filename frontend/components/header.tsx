@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Search, HelpCircle, User, LogOut, LayoutDashboard, Home, MessageSquare, Menu, X } from "lucide-react"
+import { Search, HelpCircle, User, LogOut, LayoutDashboard, Home, MessageSquare, Menu, X, Trophy } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -35,6 +35,7 @@ export function Header() {
   const mainNavItems = [
     { href: "/", label: "Home", icon: Home },
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   ]
 
   return (

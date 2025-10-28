@@ -5,9 +5,10 @@ import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ThumbsUp, MessageSquare, Share2, Bookmark, Pin } from "lucide-react"
-import { postsApi, type FeedPost } from "@/lib/api"
+import { ThumbsUp, MessageSquare, Share2, Bookmark } from "lucide-react"
+import { postsApi, type FeedPost, getCategoryPlaceholder } from "@/lib/api"
 import { CommentsSection } from "@/components/comments-section"
+import Image from "next/image"
 
 interface EngagementFeedProps {
   category?: string
@@ -42,7 +43,6 @@ export function EngagementFeed({ category, onRefresh }: EngagementFeedProps) {
         "Collaborate/Brainstorm": "collaborate",
         "Resources/Gamification": "resources",
         "Research Guardians": "research",
-        Forum: "forum",
       }
       const categoryFilter = category ? categoryMap[category] || category.toLowerCase() : undefined
       const newPosts = await postsApi.getFeed(categoryFilter, currentOffset, limit)
@@ -82,24 +82,8 @@ export function EngagementFeed({ category, onRefresh }: EngagementFeedProps) {
         ),
       )
     } catch (err) {
-      console.error("[v0] Failed to like post:", err)
+      console.error("Failed to like post:", err)
     }
-  }
-
-  const toggleComments = (postId: number) => {
-    setExpandedComments((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(postId)) {
-        newSet.delete(postId)
-      } else {
-        newSet.add(postId)
-      }
-      return newSet
-    })
-  }
-
-  const handleCommentAdded = (postId: number) => {
-    setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, comments: post.comments + 1 } : post)))
   }
 
   const toggleExpand = (postId: number) => {
@@ -118,6 +102,10 @@ export function EngagementFeed({ category, onRefresh }: EngagementFeedProps) {
       }
       return newSet
     })
+  }
+
+  const handleCommentAdded = (postId: number) => {
+    setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, comments: post.comments + 1 } : post)))
   }
 
   if (error) {
@@ -151,87 +139,104 @@ export function EngagementFeed({ category, onRefresh }: EngagementFeedProps) {
             const displayContent = isExpanded || !shouldTruncate ? post.content : post.content.slice(0, 200) + "..."
 
             return (
-              <Card key={post.id} className="p-6 bg-white shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-10 h-10 ring-2 ring-primary/10">
-                      <AvatarImage src="/placeholder.svg" />
-                      <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold">
-                        {post.author.name[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold text-sm text-foreground">{post.author.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Posted an Idea • {new Date(post.created_at).toLocaleDateString()}
-                      </p>
+              <Card
+                key={post.id}
+                className="overflow-hidden bg-white shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 animate-fade-in"
+              >
+                <div className="relative h-48 w-full bg-gradient-to-br from-primary/10 to-primary/5">
+                  <Image
+                    src={getCategoryPlaceholder(post.category) || "/placeholder.svg"}
+                    alt={post.title}
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-10 h-10 ring-2 ring-primary/10 transition-transform hover:scale-110">
+                        <AvatarImage src="/placeholder.svg" />
+                        <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold">
+                          {post.author.name[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-semibold text-sm text-foreground">{post.author.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Posted an Idea • {new Date(post.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Pin className="w-4 h-4 text-foreground" />
-                    <span className="text-sm font-medium">Pinned</span>
+
+                  <div className="flex items-start gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-600 mt-2 flex-shrink-0" />
+                    <h3 className="font-bold text-lg text-foreground leading-tight">{post.title}</h3>
                   </div>
-                </div>
 
-                <div className="flex items-start gap-2 mb-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-600 mt-2 flex-shrink-0" />
-                  <h3 className="font-bold text-lg text-foreground leading-tight">{post.title}</h3>
-                </div>
+                  <p className="text-sm text-muted-foreground mb-2 leading-relaxed whitespace-pre-wrap">
+                    {displayContent}
+                  </p>
 
-                <p className="text-sm text-muted-foreground mb-2 leading-relaxed whitespace-pre-wrap">
-                  {displayContent}
-                </p>
+                  {shouldTruncate && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="p-0 h-auto text-blue-600 hover:text-blue-700 font-medium mb-3 transition-colors"
+                      onClick={() => toggleExpand(post.id)}
+                    >
+                      {isExpanded ? "Show less" : "Read more"}
+                    </Button>
+                  )}
 
-                {shouldTruncate && (
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="p-0 h-auto text-blue-600 hover:text-blue-700 font-medium mb-3"
-                    onClick={() => toggleExpand(post.id)}
-                  >
-                    {isExpanded ? "Show less" : "Read more"}
-                  </Button>
-                )}
+                  {post.category && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <Badge
+                        variant="outline"
+                        className="text-blue-600 border-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
+                      >
+                        #{post.category}
+                      </Badge>
+                    </div>
+                  )}
 
-                {post.category && (
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <Badge variant="outline" className="text-blue-600 border-blue-600 bg-blue-50 hover:bg-blue-100">
-                      #{post.category}
-                    </Badge>
+                  <div className="flex items-center gap-1 pt-4 border-t border-border">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 hover:bg-primary/5 transition-all hover:scale-105"
+                      onClick={() => handleLike(post.id)}
+                    >
+                      <ThumbsUp
+                        className={`w-4 h-4 transition-all ${likedPosts.has(post.id) ? "fill-primary text-primary scale-110" : ""}`}
+                      />
+                      <span className="font-medium">{post.likes}</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 hover:bg-primary/5 transition-all hover:scale-105"
+                      onClick={() => toggleExpand(post.id)}
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span className="font-medium">{post.comments}</span>
+                    </Button>
+                    <div className="flex-1" />
+                    <Button variant="ghost" size="sm" className="hover:bg-primary/5 transition-all hover:scale-105">
+                      <Share2 className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="hover:bg-primary/5 transition-all hover:scale-105">
+                      <Bookmark className="w-4 h-4" />
+                    </Button>
                   </div>
-                )}
 
-                <div className="flex items-center gap-1 pt-4 border-t border-border">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-2 hover:bg-primary/5 transition-colors"
-                    onClick={() => handleLike(post.id)}
-                  >
-                    <ThumbsUp
-                      className={`w-4 h-4 transition-all ${likedPosts.has(post.id) ? "fill-primary text-primary scale-110" : ""}`}
-                    />
-                    <span className="font-medium">{post.likes}</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-2 hover:bg-primary/5 transition-colors"
-                    onClick={() => toggleExpand(post.id)}
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    <span className="font-medium">{post.comments}</span>
-                  </Button>
-                  <div className="flex-1" />
-                  <Button variant="ghost" size="sm" className="hover:bg-primary/5 transition-colors">
-                    <Share2 className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" className="hover:bg-primary/5 transition-colors">
-                    <Bookmark className="w-4 h-4" />
-                  </Button>
+                  {isExpanded && (
+                    <div className="mt-4 pt-4 border-t border-border animate-slide-down">
+                      <CommentsSection postId={post.id} onCommentAdded={() => handleCommentAdded(post.id)} />
+                    </div>
+                  )}
                 </div>
-
-                {isExpanded && <CommentsSection postId={post.id} onCommentAdded={() => handleCommentAdded(post.id)} />}
               </Card>
             )
           })}
@@ -239,7 +244,7 @@ export function EngagementFeed({ category, onRefresh }: EngagementFeedProps) {
           {hasMore && (
             <Button
               variant="outline"
-              className="w-full bg-transparent"
+              className="w-full bg-gradient-to-r from-primary/5 to-primary/10 hover:from-primary/10 hover:to-primary/20 transition-all"
               onClick={() => loadPosts(false)}
               disabled={isLoading}
             >

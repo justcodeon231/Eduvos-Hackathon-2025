@@ -76,14 +76,22 @@ export interface DashboardResponse {
       likes: Array<{ date: string; count: number }>
       comments: Array<{ date: string; count: number }>
     }
+    points: number
+    rank: number
   }
 }
 
 export interface DashboardStats {
-  totalPosts: number
-  totalLikes: number
-  totalComments: number
-  engagementData: EngagementDataPoint[]
+  user: {
+    points: number
+    rank: number
+  }
+  stats: {
+    total_posts: number
+    total_likes: number
+    total_comments: number
+    engagement_data: EngagementDataPoint[]
+  }
 }
 
 export interface EngagementDataPoint {
@@ -129,6 +137,37 @@ export interface Notification {
   created_at: string
 }
 
+export interface ForumMessage {
+  id: number
+  content: string
+  author: Author
+  created_at: string
+}
+
+export interface ChatMessage {
+  id: number
+  sender_id: number
+  recipient_id: number
+  content: string
+  created_at: string
+}
+
+export interface LeaderboardEntry {
+  user_id: number
+  name: string
+  points: number
+}
+
+export interface LeaderboardUser {
+  id: number
+  name: string
+  email: string
+  points: number
+  post_count: number
+  like_count: number
+  comment_count: number
+}
+
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = authService.getToken()
 
@@ -152,6 +191,18 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   }
 
   return response.json()
+}
+
+export function getCategoryPlaceholder(category: string): string {
+  const categoryImages: Record<string, string> = {
+    "Ideas Hub": "/placeholder.svg?height=400&width=600",
+    "Collaborate/Brainstorm": "/placeholder.svg?height=400&width=600",
+    "Resources/Gamification": "/placeholder.svg?height=400&width=600",
+    "Research Guardians": "/placeholder.svg?height=400&width=600",
+    Forum: "/placeholder.svg?height=400&width=600",
+    home: "/placeholder.svg?height=400&width=600",
+  }
+  return categoryImages[category] || "/placeholder.svg?height=400&width=600"
 }
 
 export const postsApi = {
@@ -234,10 +285,16 @@ export const dashboardApi = {
       .sort((a, b) => a.date.localeCompare(b.date))
 
     return {
-      totalPosts: response.stats.total_posts,
-      totalLikes: response.stats.likes_received,
-      totalComments: response.stats.comments_received,
-      engagementData,
+      user: {
+        points: response.stats.points,
+        rank: response.stats.rank,
+      },
+      stats: {
+        total_posts: response.stats.total_posts,
+        total_likes: response.stats.likes_received,
+        total_comments: response.stats.comments_received,
+        engagement_data: engagementData,
+      },
     }
   },
 }
@@ -281,5 +338,37 @@ export const notificationsApi = {
     return fetchWithAuth(`${API_BASE_URL}/notifications/${notificationId}/read`, {
       method: "PATCH",
     })
+  },
+}
+
+export const forumApi = {
+  async getMessages(category = "general"): Promise<ForumMessage[]> {
+    return fetchWithAuth(`${API_BASE_URL}/forum/messages?category=${category}`)
+  },
+
+  async postMessage(content: string, category = "general"): Promise<ForumMessage> {
+    return fetchWithAuth(`${API_BASE_URL}/forum/post`, {
+      method: "POST",
+      body: JSON.stringify({ content, category }),
+    })
+  },
+}
+
+export const chatApi = {
+  async sendMessage(recipientId: number, content: string): Promise<ChatMessage> {
+    return fetchWithAuth(`${API_BASE_URL}/chat/send`, {
+      method: "POST",
+      body: JSON.stringify({ recipient_id: recipientId, content }),
+    })
+  },
+
+  async getHistory(otherUserId: number): Promise<ChatMessage[]> {
+    return fetchWithAuth(`${API_BASE_URL}/chat/history/${otherUserId}`)
+  },
+}
+
+export const leaderboardApi = {
+  async getLeaderboard(limit = 10): Promise<LeaderboardUser[]> {
+    return fetchWithAuth(`${API_BASE_URL}/leaderboard?limit=${limit}`)
   },
 }

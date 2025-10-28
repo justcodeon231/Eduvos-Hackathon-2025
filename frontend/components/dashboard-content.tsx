@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import { Header } from "@/components/header"
 import { Card } from "@/components/ui/card"
 import { dashboardApi, type DashboardStats } from "@/lib/api"
-import { FileText, ThumbsUp, MessageSquare, TrendingUp } from "lucide-react"
+import { FileText, ThumbsUp, MessageSquare, TrendingUp, Trophy, Award } from "lucide-react"
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { Badge } from "@/components/ui/badge"
 
 export function DashboardContent() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -56,20 +57,41 @@ export function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
       <Header />
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Analytics Dashboard</h1>
+        <div className="mb-8 animate-fade-in">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent mb-2">
+            Analytics Dashboard
+          </h1>
+          <p className="text-muted-foreground">Track your engagement and performance</p>
+        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          <Card className="p-6 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/20 hover:shadow-xl transition-all hover:scale-105">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Total Points</p>
+                <p className="text-3xl font-bold text-yellow-600">{stats?.user?.points || 0}</p>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center shadow-lg">
+                <Trophy className="w-6 h-6 text-white" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1 mt-4 text-sm">
+              <TrendingUp className="w-4 h-4 text-yellow-600" />
+              <span className="text-yellow-600 font-medium">Rank #{stats?.user?.rank || "N/A"}</span>
+            </div>
+          </Card>
+
+          <Card className="p-6 hover:shadow-xl transition-all hover:scale-105">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Total Posts</p>
-                <p className="text-3xl font-bold">{stats?.totalPosts || 0}</p>
+                <p className="text-3xl font-bold">{stats?.stats?.total_posts || 0}</p>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <FileText className="w-6 h-6 text-blue-500" />
+              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg">
+                <FileText className="w-6 h-6 text-white" />
               </div>
             </div>
             <div className="flex items-center gap-1 mt-4 text-sm">
@@ -78,14 +100,14 @@ export function DashboardContent() {
             </div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-6 hover:shadow-xl transition-all hover:scale-105">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Total Likes Received</p>
-                <p className="text-3xl font-bold">{stats?.totalLikes || 0}</p>
+                <p className="text-sm text-muted-foreground mb-1">Total Likes</p>
+                <p className="text-3xl font-bold">{stats?.stats?.total_likes || 0}</p>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-pink-500/10 flex items-center justify-center">
-                <ThumbsUp className="w-6 h-6 text-pink-500" />
+              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-pink-500 to-red-500 flex items-center justify-center shadow-lg">
+                <ThumbsUp className="w-6 h-6 text-white" />
               </div>
             </div>
             <div className="flex items-center gap-1 mt-4 text-sm">
@@ -94,14 +116,14 @@ export function DashboardContent() {
             </div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-6 hover:shadow-xl transition-all hover:scale-105">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Total Comments Received</p>
-                <p className="text-3xl font-bold">{stats?.totalComments || 0}</p>
+                <p className="text-sm text-muted-foreground mb-1">Total Comments</p>
+                <p className="text-3xl font-bold">{stats?.stats?.total_comments || 0}</p>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <MessageSquare className="w-6 h-6 text-purple-500" />
+              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center shadow-lg">
+                <MessageSquare className="w-6 h-6 text-white" />
               </div>
             </div>
             <div className="flex items-center gap-1 mt-4 text-sm">
@@ -109,9 +131,26 @@ export function DashboardContent() {
               <span className="text-green-500">Engaged</span>
             </div>
           </Card>
+
+          <Card className="p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/20 hover:shadow-xl transition-all hover:scale-105">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Achievements</p>
+                <p className="text-3xl font-bold text-purple-600">{Math.floor((stats?.user?.points || 0) / 100)}</p>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+                <Award className="w-6 h-6 text-white" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1 mt-4 text-sm">
+              <Badge variant="secondary" className="text-xs">
+                Level {Math.floor((stats?.user?.points || 0) / 500) + 1}
+              </Badge>
+            </div>
+          </Card>
         </div>
 
-        <Card className="p-6">
+        <Card className="p-6 hover:shadow-xl transition-all">
           <h2 className="text-xl font-semibold mb-6">Engagement Over Time</h2>
           <ChartContainer
             config={{
@@ -127,7 +166,7 @@ export function DashboardContent() {
             className="h-[400px]"
           >
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={stats?.engagementData || []} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <LineChart data={stats?.stats?.engagement_data || []} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
                 <YAxis />
