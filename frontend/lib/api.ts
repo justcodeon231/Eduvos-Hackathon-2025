@@ -168,6 +168,22 @@ export interface LeaderboardUser {
   comment_count: number
 }
 
+export interface SearchResults {
+  posts: Post[]
+  users: UserProfile[]
+}
+
+export interface PublicProfile {
+  id: number
+  name: string
+  email: string
+  posts: Post[]
+  total_likes: number
+  total_comments: number
+  rank: number
+  points: number
+}
+
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = authService.getToken()
 
@@ -253,6 +269,10 @@ export const postsApi = {
 export const profileApi = {
   async getProfile(): Promise<UserProfile> {
     return fetchWithAuth(`${API_BASE_URL}/profile`)
+  },
+
+  async getPublicProfile(userId: number): Promise<PublicProfile> {
+    return fetchWithAuth(`${API_BASE_URL}/users/${userId}`)
   },
 
   async updateProfile(data: UpdateProfileData): Promise<UserProfile> {
@@ -370,5 +390,12 @@ export const chatApi = {
 export const leaderboardApi = {
   async getLeaderboard(limit = 10): Promise<LeaderboardUser[]> {
     return fetchWithAuth(`${API_BASE_URL}/leaderboard?limit=${limit}`)
+  },
+}
+
+export const searchApi = {
+  async search(query: string): Promise<SearchResults> {
+    const params = new URLSearchParams({ q: query })
+    return fetchWithAuth(`${API_BASE_URL}/search?${params}`)
   },
 }
