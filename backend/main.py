@@ -1,6 +1,7 @@
 # main.py - lean one-on-one social app
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, func, UniqueConstraint
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session
@@ -143,6 +144,11 @@ class NotificationOut(BaseModel):
     actor_id: Optional[int]
     is_read: int
     created_at: datetime
+
+class SharePostCreate(BaseModel):
+    recipient_id: int
+    post_id: int
+    message: Optional[str] = None  # optional extra message
 
 # ---------------------
 # Auth setup
@@ -336,6 +342,123 @@ def create_comment(c: CommentCreate, current_user: User = Depends(get_current_us
     return {"detail": "Comment added"}
 
 # ---------------------
+# Routes: Dashboard
+# ---------------------
+@app.get("/dashboard")
+def dashboard(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Posts metrics
+    total_posts = db.query(Post).filter(Post.user_id == current_user.id).count()
+    total_likes_received = db.query(PostLike).join(Post).filter(Post.user_id == current_user.id).count()
+    total_comments_received = db.query(Comment).join(Post).filter(Post.user_id == current_user.id).count()
+    
+    # Messages metrics
+    total_messages_sent = db.query(ChatMessage).filter(ChatMessage.sender_id == current_user.id).count()
+    total_messages_received = db.query(ChatMessage).filter(ChatMessage.recipient_id == current_user.id).count()
+    
+    # Notifications
+    unread_notifications = db.query(Notification).filter_by(recipient_id=current_user.id, is_read=0).count()
+    
+    # Recent posts
+    recent_posts = db.query(Post).filter(Post.user_id == current_user.id).order_by(Post.created_at.desc()).limit(5).all()
+    recent_posts_data = [{
+        "id": p.id,
+        "title": p.title,
+        "likes": len(p.likes),
+        "comments": len(p.comments),
+        "created_at": p.created_at
+    } for p in recent_posts]
+    
+    # Recent messages (last 5, sent or received)
+    recent_messages = db.query(ChatMessage).filter(
+        (ChatMessage.sender_id == current_user.id) | (ChatMessage.recipient_id == current_user.id)
+    ).order_by(ChatMessage.created_at.desc()).limit(5).all()
+    recent_messages_data = [{
+        "id": m.id,
+        "sender_id": m.sender_id,
+        "recipient_id": m.recipient_id,
+        "content": m.content,
+        "created_at": m.created_at
+    } for m in recent_messages]
+    
+    return {
+        "total_posts": total_posts,
+        "total_likes_received": total_likes_received,
+        "total_comments_received": total_comments_received,
+        "total_messages_sent": total_messages_sent,
+        "total_messages_received": total_messages_received,
+        "unread_notifications": unread_notifications,
+        "recent_posts": recent_posts_data,
+        "recent_messages": recent_messages_data
+    }
+
+# ---------------------
+# Routes: Leaderboard
+# ---------------------
+@app.get("/leaderboard")
+def leaderboard(db: Session = Depends(get_db)):
+    users = db.query(User).all()
+    
+    leaderboard_data = []
+    for u in users:
+        total_posts = db.query(Post).filter(Post.user_id == u.id).count()
+        total_likes = db.query(PostLike).join(Post).filter(Post.user_id == u.id).count()
+        total_comments = db.query(Comment).join(Post).filter(Post.user_id == u.id).count()
+        score = total_posts + total_likes + total_comments  # simple engagement score
+        leaderboard_data.append({
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "total_posts": total_posts,
+            "total_likes": total_likes,
+            "total_comments": total_comments,
+            "score": score
+        })
+    
+    leaderboard_sorted = sorted(leaderboard_data, key=lambda x: x["score"], reverse=True)
+    return leaderboard_sorted[:10]  # top 10 users
+
+# ---------------------
+# Routes: SEARCH USERS
+# ---------------------
+@app.get("/users/search", response_model=List[UserOut])
+def search_users(query: str, db: Session = Depends(get_db)):
+    """
+    Search users by name or email (case-insensitive, partial match).
+    USAGE: GET /users/search?query=leo
+    """
+    users = db.query(User).filter(
+        (User.name.ilike(f"%{query}%")) | (User.email.ilike(f"%{query}%"))
+    ).all()
+    return users
+
+# ---------------------
+# Routes: SEARCH POSTS
+# ---------------------
+@app.get("/posts/search", response_model=List[PostOut])
+def search_posts(query: str, db: Session = Depends(get_db)):
+    """
+    Search posts by title, content, or category (case-insensitive, partial match).
+    """
+    posts = db.query(Post).filter(
+        (Post.title.ilike(f"%{query}%")) |
+        (Post.content.ilike(f"%{query}%")) |
+        (Post.category.ilike(f"%{query}%"))
+    ).all()
+    
+    return [
+        PostOut(
+            id=p.id,
+            title=p.title,
+            content=p.content,
+            category=p.category,
+            likes=len(p.likes),
+            comments=len(p.comments),
+            author=p.author,
+            created_at=p.created_at
+        ) for p in posts
+    ]
+
+# ---------------------
 # Routes: Chat (REST)
 # ---------------------
 @app.post("/chat/send", response_model=ChatMessageOut)
@@ -363,6 +486,52 @@ def chat_history(other_user_id: int, current_user: User = Depends(get_current_us
         ((ChatMessage.sender_id==other_user_id) & (ChatMessage.recipient_id==current_user.id))
     ).order_by(ChatMessage.created_at).all()
     return msgs
+
+# -----------------------------
+# Routes: POST SHARING VIA DM
+# -----------------------------
+@app.post("/chat/share-post", response_model=ChatMessageOut)
+def share_post_via_dm(data: SharePostCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Verify recipient exists
+    recipient = db.query(User).filter(User.id == data.recipient_id).first()
+    if not recipient:
+        raise HTTPException(404, detail="Recipient not found")
+
+    # Verify post exists
+    post = db.query(Post).filter(Post.id == data.post_id).first()
+    if not post:
+        raise HTTPException(404, detail="Post not found")
+
+    # Compose message content
+    content = f"Shared a post: '{post.title}'\n{data.message or ''}\nLink/Post ID: {post.id}"
+
+    # Create chat message
+    chat = ChatMessage(sender_id=current_user.id, recipient_id=recipient.id, content=content)
+    db.add(chat)
+    db.commit()
+    db.refresh(chat)
+
+    # Push WS notification
+    for ws in list(chat_connections.get(recipient.id, [])):
+        try:
+            ws.send_json({
+                "sender_id": current_user.id,
+                "content": content,
+                "created_at": chat.created_at.isoformat()
+            })
+        except Exception:
+            pass
+
+    # Create notification record
+    create_notification(
+        db,
+        recipient_id=recipient.id,
+        actor_id=current_user.id,
+        ntype="share_post",
+        message=f"{current_user.name} shared a post with you"
+    )
+
+    return chat
 
 # ---------------------
 # Routes: Notifications
@@ -402,3 +571,10 @@ async def websocket_notifications(ws: WebSocket, user_id: int):
             data = await ws.receive_text()
     except WebSocketDisconnect:
         remove_connection(notification_connections, user_id, ws)
+
+# --------------------- 
+# Local dev runner 
+# --------------------- 
+if __name__ == "__main__": 
+    import uvicorn 
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
